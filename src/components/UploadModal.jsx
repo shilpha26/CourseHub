@@ -76,9 +76,10 @@ function UploadModal({ isOpen, onClose, onUpload, existingCourses }) {
           <div className="form-group">
             <label className="form-label">Choose an option:</label>
             <div className="radio-group">
-              <label className="radio-option">
+              <label className={`radio-option ${existingCourses.length === 0 ? 'disabled' : ''}`}>
                 <input
                   type="radio"
+                  name="upload-option"
                   value="existing"
                   checked={selectedOption === 'existing'}
                   onChange={(e) => setSelectedOption(e.target.value)}
@@ -89,6 +90,7 @@ function UploadModal({ isOpen, onClose, onUpload, existingCourses }) {
               <label className="radio-option">
                 <input
                   type="radio"
+                  name="upload-option"
                   value="new"
                   checked={selectedOption === 'new'}
                   onChange={(e) => setSelectedOption(e.target.value)}

@@ -161,6 +161,20 @@
   transition: color var(--transition-fast);
 }
 
+.radio-option.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.radio-option input:disabled {
+  cursor: not-allowed;
+}
+
+.radio-option small {
+  font-size: 0.75rem;
+  font-style: italic;
+}
+
 /* Select Dropdown */
 .form-select {
   width: 100%;
