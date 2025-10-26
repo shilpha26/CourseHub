@@ -11,12 +11,11 @@ function NotesPanel({ video, onSaveNotes }) {
   const currentVideoIdRef = useRef(null);
 
   useEffect(() => {
-    if (video && video.id !== currentVideoIdRef.current) {
-      // Only update notes when switching to a different video
-      setNotes(video.notes || '');
-      currentVideoIdRef.current = video.id;
-    }
-  }, [video?.id]);
+  if (video && video.id !== currentVideoIdRef.current) {
+    setNotes(video.notes || '');
+    currentVideoIdRef.current = video.id;
+  }
+}, [video?.id, video?.notes]); 
 
   const handleSave = async () => {
   if (!video) return;

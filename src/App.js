@@ -216,33 +216,33 @@ function App() {
   };
 
   const handleCourseSelect = async (course) => {
-  if (!course || !course.videos || course.videos.length === 0) {
-    alert('This course has no videos yet.');
-    return;
-  }
-  
-  // Reload fresh data from database
-  const allCourses = await courseHubDB.getAllCourses();
-  const freshCourse = allCourses.find(c => c.id === course.id);
-  
-  setSelectedCourse(freshCourse || course);
-  setSelectedVideo(freshCourse?.videos[0] || course.videos[0]);
-  setView('player');
-};
+    if (!course || !course.videos || course.videos.length === 0) {
+      alert('This course has no videos yet.');
+      return;
+    }
+    
+    // Reload fresh data from database
+    const allCourses = await courseHubDB.getAllCourses();
+    const freshCourse = allCourses.find(c => c.id === course.id);
+    
+    setSelectedCourse(freshCourse || course);
+    setSelectedVideo(freshCourse?.videos[0] || course.videos[0]);
+    setView('player');
+  };
 
   const handleVideoSelect = async (video) => {
-  // Reload course from database to get fresh notes
-  const updatedCourses = await courseHubDB.getAllCourses();
-  const updatedCourse = updatedCourses.find(c => c.id === selectedCourse?.id);
-  
-  if (updatedCourse) {
-    setSelectedCourse(updatedCourse);
-    const freshVideo = updatedCourse.videos.find(v => v.id === video.id);
-    setSelectedVideo(freshVideo || video);
-  } else {
-    setSelectedVideo(video);
-  }
-};
+    // Reload course from database to get fresh notes
+    const updatedCourses = await courseHubDB.getAllCourses();
+    const updatedCourse = updatedCourses.find(c => c.id === selectedCourse?.id);
+    
+    if (updatedCourse) {
+      setSelectedCourse(updatedCourse);
+      const freshVideo = updatedCourse.videos.find(v => v.id === video.id);
+      setSelectedVideo(freshVideo || video);
+    } else {
+      setSelectedVideo(video);
+    }
+  };
 
   const handleDeleteCourse = async (courseId) => {
     if (window.confirm('Are you sure you want to delete this course?')) {
@@ -256,6 +256,29 @@ function App() {
       }
     }
   };
+
+  const handleDeleteVideo = async (videoId) => {
+  if (!selectedCourse) return;
+
+  if (window.confirm('Are you sure you want to delete this video?')) {
+    const updatedVideos = selectedCourse.videos.filter(v => v.id !== videoId);
+    
+    const updatedCourse = {
+      ...selectedCourse,
+      videos: updatedVideos
+    };
+
+    await courseHubDB.saveCourse(updatedCourse);
+    setSelectedCourse(updatedCourse);
+    
+    // If deleted video was selected, select first video or null
+    if (selectedVideo?.id === videoId) {
+      setSelectedVideo(updatedVideos.length > 0 ? updatedVideos[0] : null);
+    }
+    
+    await loadCoursesFromDB();
+  }
+};
 
   const handleVideoComplete = async (videoId) => {
     if (selectedCourse) {
@@ -276,10 +299,47 @@ function App() {
   };
 
   const handleSaveNotes = async (videoId, notes) => {
-  try {
-    await courseHubDB.saveVideoNotes(videoId, notes);
-  } catch (error) {
-    console.error('Error saving notes:', error);
+    try {
+      await courseHubDB.saveVideoNotes(videoId, notes);
+    } catch (error) {
+      console.error('Error saving notes:', error);
+    }
+  };
+
+  const handleReorderVideos = async (newVideoOrder) => {
+    if (!selectedCourse) return;
+    
+    const updatedCourse = {
+      ...selectedCourse,
+      videos: newVideoOrder
+    };
+    
+    await courseHubDB.saveCourse(updatedCourse);
+    setSelectedCourse(updatedCourse);
+    await loadCoursesFromDB();
+  };
+
+  const handleAddVideosToExistingCourse = async (courseId, files) => {
+  const course = courses.find(c => c.id === courseId);
+  if (!course) {
+    alert('Course not found');
+    return;
+  }
+
+  await handleUpload({
+    option: 'existing',
+    courseId: courseId,
+    title: '',
+    description: '',
+    files: files
+  });
+
+  // Reload the current course to show new videos immediately
+  const updatedCourses = await courseHubDB.getAllCourses();
+  const updatedCourse = updatedCourses.find(c => c.id === courseId);
+  
+  if (updatedCourse) {
+    setSelectedCourse(updatedCourse);
   }
 };
 
@@ -334,6 +394,9 @@ function App() {
               course={selectedCourse}
               selectedVideo={selectedVideo}
               onVideoSelect={handleVideoSelect}
+              onReorderVideos={handleReorderVideos}
+              onAddVideos={handleAddVideosToExistingCourse}
+              onDeleteVideo={handleDeleteVideo}
             />
           </div>
         </div>

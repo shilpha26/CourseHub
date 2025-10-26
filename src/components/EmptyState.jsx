@@ -1,5 +1,4 @@
 import React from 'react';
-import { VideoIcon } from './Icons';
 
 function EmptyState({ onUploadClick }) {
   return (
