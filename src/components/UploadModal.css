@@ -311,3 +311,91 @@
 .modal-content::-webkit-scrollbar-thumb:hover {
   background: #999;
 }
+
+/* Update responsive section in UploadModal.css */
+
+@media (max-width: 768px) {
+  .modal-overlay {
+    padding: 0;
+  }
+
+  .modal-content {
+    max-width: 100%;
+    max-height: 100vh;
+    border-radius: 0;
+    margin: 0;
+  }
+
+  .modal-header {
+    padding: 1rem;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: white;
+  }
+
+  .modal-header h2 {
+    font-size: 1.25rem;
+  }
+
+  .modal-body {
+    padding: 1rem;
+  }
+
+  .radio-options {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .form-group {
+    margin-bottom: 1.25rem;
+  }
+
+  .modal-footer {
+    padding: 1rem;
+    position: sticky;
+    bottom: 0;
+    background: white;
+    border-top: 2px solid #e1e4e8;
+    margin-top: 0;
+  }
+
+  .modal-footer .btn {
+    flex: 1;
+  }
+}
+
+@media (max-width: 480px) {
+  .modal-header {
+    padding: 0.75rem;
+  }
+
+  .modal-header h2 {
+    font-size: 1.1rem;
+  }
+
+  .modal-body {
+    padding: 0.75rem;
+  }
+
+  .form-label {
+    font-size: 0.875rem;
+  }
+
+  .course-input,
+  .course-textarea,
+  .course-select,
+  .file-input {
+    font-size: 0.875rem;
+    padding: 0.625rem 0.875rem;
+  }
+
+  .radio-option-inline span {
+    font-size: 0.875rem;
+  }
+
+  .btn {
+    padding: 0.625rem 1rem;
+    font-size: 0.875rem;
+  }
+}

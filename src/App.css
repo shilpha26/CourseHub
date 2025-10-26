@@ -1332,3 +1332,136 @@ body {
     font-size: 0.85rem;
   }
 }
+
+/* ===================================
+   MOBILE RESPONSIVE STYLES
+=================================== */
+
+@media (max-width: 1024px) {
+  .player-view {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  
+  .video-list {
+    max-height: 60vh;
+    position: relative;
+    top: 0;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Header adjustments */
+  .header {
+    padding: 1rem;
+  }
+  
+  .header-content {
+    gap: 1rem;
+  }
+  
+  .logo-title {
+    font-size: 1.35rem;
+  }
+  
+  .logo-subtitle {
+    font-size: 0.65rem;
+  }
+  
+  .logo-icon {
+    width: 38px;
+    height: 38px;
+  }
+  
+  .header-actions .btn span {
+    display: none;
+  }
+  
+  .header-actions .btn {
+    padding: 0.625rem;
+  }
+  
+  .header-actions {
+    gap: 0.5rem;
+  }
+
+  /* Player View - Stack vertically */
+  .player-view {
+    padding: 0;
+    gap: 0;
+  }
+  
+  .video-player {
+    border-radius: 0;
+  }
+  
+  .video-list {
+    border-radius: 0;
+    max-height: 50vh;
+  }
+
+  /* Video Controls */
+  .video-controls {
+    padding: 1.5rem 1rem 1rem;
+  }
+  
+  .control-btn {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .volume-slider {
+    display: none;
+  }
+
+  /* Course Grid */
+  .courses-grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  
+  .main-content {
+    padding: 1.5rem 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .logo-title {
+    font-size: 1.15rem;
+  }
+  
+  .logo-subtitle {
+    display: none;
+  }
+  
+  .logo-icon {
+    width: 34px;
+    height: 34px;
+  }
+  
+  .header-actions .btn {
+    padding: 0.5rem;
+  }
+  
+  .control-btn {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .time-display {
+    font-size: 0.8rem;
+    min-width: 90px;
+  }
+  
+  .video-controls {
+    padding: 1rem 0.75rem 0.75rem;
+  }
+  
+  .course-card {
+    padding: 1rem;
+  }
+  
+  .main-content {
+    padding: 1rem;
+  }
+}
