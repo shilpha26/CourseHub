@@ -4,9 +4,10 @@ import VideoPlayer from './components/VideoPlayer';
 import CourseList from './components/CourseList';
 import VideoList from './components/VideoList';
 import UploadModal from './components/UploadModal';
+import NotesPanel from './components/NotesPanel';
 import courseHubDB from './utils/indexedDB';
 import { generateId } from './utils/helpers';
-import JSZip from 'jszip';
+import * as zip from "@zip.js/zip.js";
 import './App.css';
 
 function App() {
@@ -17,7 +18,6 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Load courses from IndexedDB on mount
   useEffect(() => {
     loadCoursesFromDB();
   }, []);
@@ -43,54 +43,61 @@ function App() {
   };
 
   const handleUpload = async (uploadData) => {
-  const { option, courseId, title, description, files } = uploadData;
+    const { option, courseId, title, description, files } = uploadData;
 
-  let targetCourse = null;
+    let targetCourse = null;
 
-  if (option === 'existing') {
-    targetCourse = courses.find(c => c.id === courseId);
-    if (!targetCourse) {
-      alert('Course not found');
-      return;
+    if (option === 'existing') {
+      targetCourse = courses.find(c => c.id === courseId);
+      if (!targetCourse) {
+        alert('Course not found');
+        return;
+      }
     }
-  }
 
-  // Separate ZIP files and video files
-  const zipFiles = [];
-  const videoFiles = [];
+    const zipFiles = [];
+    const videoFiles = [];
 
-  for (const file of files) {
-    if (file.name.endsWith('.zip')) {
-      zipFiles.push(file);
-    } else if (file.type.startsWith('video/')) {
-      videoFiles.push(file);
+    for (const file of files) {
+      if (file.name.endsWith('.zip')) {
+        zipFiles.push(file);
+      } else if (file.type.startsWith('video/')) {
+        videoFiles.push(file);
+      }
     }
-  }
 
-  // Process ZIP files (each ZIP becomes its own course or adds to existing)
-  for (const zipFile of zipFiles) {
-    await handleZipFile(zipFile, option, targetCourse, title, description);
-  }
+    for (const zipFile of zipFiles) {
+      await handleZipFile(zipFile, option, targetCourse, title, description);
+    }
 
-  // Process ALL video files together as ONE course (THIS IS THE KEY FIX)
-  if (videoFiles.length > 0) {
-    await handleMultipleVideoFiles(videoFiles, option, targetCourse, title, description);
-  }
+    if (videoFiles.length > 0) {
+      await handleMultipleVideoFiles(videoFiles, option, targetCourse, title, description);
+    }
 
-  // Reload courses from DB
-  await loadCoursesFromDB();
-};
+    await loadCoursesFromDB();
+  };
 
   const handleZipFile = async (zipFile, option, targetCourse, title, description) => {
     try {
-      const zip = await JSZip.loadAsync(zipFile);
+      const fileSizeMB = zipFile.size / 1024 / 1024;
+      if (fileSizeMB > 100) {
+        console.log(`Processing large ZIP file (${fileSizeMB.toFixed(0)}MB)...`);
+      }
+
+      const zipReader = new zip.ZipReader(new zip.BlobReader(zipFile));
+      const entries = await zipReader.getEntries();
       const videos = [];
 
-      for (const [filename, fileData] of Object.entries(zip.files)) {
-        if (!fileData.dir && /\.(mp4|webm|ogg|mkv|avi)$/i.test(filename)) {
-          const blob = await fileData.async('blob');
-          const videoBlob = new Blob([blob], { type: 'video/mp4' });
-
+      for (const entry of entries) {
+        if (entry.directory) continue;
+        
+        const filename = entry.filename;
+        
+        if (/\.(mp4|webm|ogg|mkv|avi|mov)$/i.test(filename)) {
+          console.log(`Extracting: ${filename} (${(entry.uncompressedSize / 1024 / 1024).toFixed(2)}MB)`);
+          
+          const videoBlob = await entry.getData(new zip.BlobWriter());
+          
           videos.push({
             id: generateId(),
             name: filename.split('/').pop(),
@@ -102,113 +109,140 @@ function App() {
         }
       }
 
-      if (videos.length > 0) {
-        if (option === 'existing' && targetCourse) {
-          // Add videos to existing course
-          const updatedCourse = {
-            ...targetCourse,
-            videos: [...targetCourse.videos, ...videos]
-          };
-          await courseHubDB.saveCourse(updatedCourse);
-        } else {
-          // Create new course
-          const newCourse = {
-            id: generateId(),
-            name: title || zipFile.name.replace('.zip', ''),
-            description: description || '',
-            videos: videos,
-            createdAt: new Date().toISOString()
-          };
-          await courseHubDB.saveCourse(newCourse);
-        }
+      await zipReader.close();
+
+      if (videos.length === 0) {
+        alert('No video files found in the ZIP archive.');
+        return;
+      }
+
+      console.log(`Found ${videos.length} video(s)`);
+
+      if (option === 'existing' && targetCourse) {
+        const updatedCourse = {
+          ...targetCourse,
+          videos: [...targetCourse.videos, ...videos]
+        };
+        await courseHubDB.saveCourse(updatedCourse);
+        alert(`✅ ${videos.length} video${videos.length !== 1 ? 's' : ''} added to "${targetCourse.name}"!`);
+      } else {
+        const newCourse = {
+          id: generateId(),
+          name: title || zipFile.name.replace('.zip', ''),
+          description: description || '',
+          videos: videos,
+          createdAt: new Date().toISOString()
+        };
+        await courseHubDB.saveCourse(newCourse);
+        alert(`✅ Course "${newCourse.name}" created with ${videos.length} video${videos.length !== 1 ? 's' : ''}!`);
       }
     } catch (error) {
       console.error('Error processing ZIP file:', error);
-      alert('Error processing ZIP file. Please try again.');
-    }
-  };
-
-  // NEW FUNCTION: Handle multiple video files as ONE course with duplicate detection
-const handleMultipleVideoFiles = async (videoFiles, option, targetCourse, title, description) => {
-  let duplicates = [];
-  let newVideoFiles = videoFiles;
-
-  // Check for duplicates if adding to existing course
-  if (option === 'existing' && targetCourse) {
-    const existingVideoNames = targetCourse.videos.map(v => v.name.toLowerCase());
-    
-    duplicates = videoFiles.filter(file => 
-      existingVideoNames.includes(file.name.toLowerCase())
-    );
-
-    newVideoFiles = videoFiles.filter(file => 
-      !existingVideoNames.includes(file.name.toLowerCase())
-    );
-
-    // Show warning if duplicates found
-    if (duplicates.length > 0) {
-      const duplicateNames = duplicates.map(f => f.name).join('\n');
-      const continueUpload = window.confirm(
-        `⚠️ Duplicate Video${duplicates.length > 1 ? 's' : ''} Found!\n\n` +
-        `The following video${duplicates.length > 1 ? 's already exist' : ' already exists'} in "${targetCourse.name}":\n\n` +
-        `${duplicateNames}\n\n` +
-        `${newVideoFiles.length > 0 
-          ? `Do you want to upload the ${newVideoFiles.length} new video${newVideoFiles.length !== 1 ? 's' : ''}?` 
-          : 'All videos are duplicates. Nothing to upload.'}`
-      );
-
-      if (!continueUpload || newVideoFiles.length === 0) {
-        return;
+      
+      if (error.message && error.message.includes('memory')) {
+        alert(
+          '⚠️ ZIP file too large for browser memory!\n\n' +
+          'Please extract the ZIP and upload videos individually.'
+        );
+      } else {
+        alert('Error processing ZIP file. Please try again or upload videos individually.');
       }
     }
-  }
+  };
 
-  // Create video objects for all non-duplicate files
-  const newVideos = newVideoFiles.map(file => ({
-    id: generateId(),
-    name: file.name,
-    blob: file,
-    duration: 0,
-    watched: false,
-    progress: 0
-  }));
+  const handleMultipleVideoFiles = async (videoFiles, option, targetCourse, title, description) => {
+    let duplicates = [];
+    let newVideoFiles = videoFiles;
 
-  if (option === 'existing' && targetCourse) {
-    // Add all new videos to existing course
-    const updatedCourse = {
-      ...targetCourse,
-      videos: [...targetCourse.videos, ...newVideos]
-    };
-    await courseHubDB.saveCourse(updatedCourse);
-    
-    // Show success message
-    if (newVideos.length > 0) {
-      alert(`✅ ${newVideos.length} video${newVideos.length !== 1 ? 's' : ''} added to "${targetCourse.name}"!`);
+    if (option === 'existing' && targetCourse) {
+      const existingVideoNames = targetCourse.videos.map(v => v.name.toLowerCase());
+      
+      duplicates = videoFiles.filter(file => 
+        existingVideoNames.includes(file.name.toLowerCase())
+      );
+
+      newVideoFiles = videoFiles.filter(file => 
+        !existingVideoNames.includes(file.name.toLowerCase())
+      );
+
+      if (duplicates.length > 0) {
+        const duplicateNames = duplicates.map(f => f.name).join('\n');
+        const continueUpload = window.confirm(
+          `⚠️ Duplicate Video${duplicates.length > 1 ? 's' : ''} Found!\n\n` +
+          `The following video${duplicates.length > 1 ? 's already exist' : ' already exists'} in "${targetCourse.name}":\n\n` +
+          `${duplicateNames}\n\n` +
+          `${newVideoFiles.length > 0 
+            ? `Do you want to upload the ${newVideoFiles.length} new video${newVideoFiles.length !== 1 ? 's' : ''}?` 
+            : 'All videos are duplicates. Nothing to upload.'}`
+        );
+
+        if (!continueUpload || newVideoFiles.length === 0) {
+          return;
+        }
+      }
     }
-  } else {
-    // Create ONE new course with ALL videos
-    const newCourse = {
+
+    const newVideos = newVideoFiles.map(file => ({
       id: generateId(),
-      name: title || `Course - ${new Date().toLocaleDateString()}`,
-      description: description || '',
-      videos: newVideos,
-      createdAt: new Date().toISOString()
-    };
-    await courseHubDB.saveCourse(newCourse);
-    
-    alert(`✅ Course "${newCourse.name}" created with ${newVideos.length} video${newVideos.length !== 1 ? 's' : ''}!`);
+      name: file.name,
+      blob: file,
+      duration: 0,
+      watched: false,
+      progress: 0
+    }));
+
+    if (option === 'existing' && targetCourse) {
+      const updatedCourse = {
+        ...targetCourse,
+        videos: [...targetCourse.videos, ...newVideos]
+      };
+      await courseHubDB.saveCourse(updatedCourse);
+      
+      if (newVideos.length > 0) {
+        alert(`✅ ${newVideos.length} video${newVideos.length !== 1 ? 's' : ''} added to "${targetCourse.name}"!`);
+      }
+    } else {
+      const newCourse = {
+        id: generateId(),
+        name: title || `Course - ${new Date().toLocaleDateString()}`,
+        description: description || '',
+        videos: newVideos,
+        createdAt: new Date().toISOString()
+      };
+      await courseHubDB.saveCourse(newCourse);
+      
+      alert(`✅ Course "${newCourse.name}" created with ${newVideos.length} video${newVideos.length !== 1 ? 's' : ''}!`);
+    }
+  };
+
+  const handleCourseSelect = async (course) => {
+  if (!course || !course.videos || course.videos.length === 0) {
+    alert('This course has no videos yet.');
+    return;
   }
+  
+  // Reload fresh data from database
+  const allCourses = await courseHubDB.getAllCourses();
+  const freshCourse = allCourses.find(c => c.id === course.id);
+  
+  setSelectedCourse(freshCourse || course);
+  setSelectedVideo(freshCourse?.videos[0] || course.videos[0]);
+  setView('player');
 };
 
-  const handleCourseSelect = (course) => {
-    setSelectedCourse(course);
-    setSelectedVideo(course.videos[0]);
-    setView('player');
-  };
-
-  const handleVideoSelect = (video) => {
+  const handleVideoSelect = async (video) => {
+  // Reload course from database to get fresh notes
+  const updatedCourses = await courseHubDB.getAllCourses();
+  const updatedCourse = updatedCourses.find(c => c.id === selectedCourse?.id);
+  
+  if (updatedCourse) {
+    setSelectedCourse(updatedCourse);
+    const freshVideo = updatedCourse.videos.find(v => v.id === video.id);
+    setSelectedVideo(freshVideo || video);
+  } else {
     setSelectedVideo(video);
-  };
+  }
+};
 
   const handleDeleteCourse = async (courseId) => {
     if (window.confirm('Are you sure you want to delete this course?')) {
@@ -228,7 +262,6 @@ const handleMultipleVideoFiles = async (videoFiles, option, targetCourse, title,
       await courseHubDB.updateVideoProgress(videoId, 100, true);
       await loadCoursesFromDB();
 
-      // Update selected course
       const updated = courses.find(c => c.id === selectedCourse.id);
       if (updated) {
         setSelectedCourse(updated);
@@ -241,6 +274,14 @@ const handleMultipleVideoFiles = async (videoFiles, option, targetCourse, title,
       await courseHubDB.updateVideoProgress(videoId, progress, progress >= 95);
     }
   };
+
+  const handleSaveNotes = async (videoId, notes) => {
+  try {
+    await courseHubDB.saveVideoNotes(videoId, notes);
+  } catch (error) {
+    console.error('Error saving notes:', error);
+  }
+};
 
   const goBackToCourses = () => {
     setView('courses');
@@ -277,16 +318,24 @@ const handleMultipleVideoFiles = async (videoFiles, option, targetCourse, title,
         />
       ) : (
         <div className="player-view">
-          <VideoPlayer 
-            video={selectedVideo}
-            onVideoComplete={handleVideoComplete}
-            onProgressUpdate={handleProgressUpdate}
-          />
-          <VideoList 
-            course={selectedCourse}
-            selectedVideo={selectedVideo}
-            onVideoSelect={handleVideoSelect}
-          />
+          <div className="player-column">
+            <VideoPlayer 
+              video={selectedVideo}
+              onVideoComplete={handleVideoComplete}
+              onProgressUpdate={handleProgressUpdate}
+            />
+            <NotesPanel 
+              video={selectedVideo}
+              onSaveNotes={handleSaveNotes}
+            />
+          </div>
+          <div className="sidebar-column">
+            <VideoList 
+              course={selectedCourse}
+              selectedVideo={selectedVideo}
+              onVideoSelect={handleVideoSelect}
+            />
+          </div>
         </div>
       )}
 

@@ -69,8 +69,9 @@ class CourseHubDB {
         duration: video.duration || 0,
         watched: video.watched || false,
         progress: video.progress || 0,
-        blob: video.blob || null, // Store the actual video blob
-        thumbnail: video.thumbnail || null // Store thumbnail too
+        blob: video.blob || null,
+        thumbnail: video.thumbnail || null,
+        notes: video.notes || '' // Add notes field here
       };
 
       await videosStore.put(videoData);
@@ -148,6 +149,48 @@ class CourseHubDB {
     });
   }
 
+  // Save video notes
+  async saveVideoNotes(videoId, notes) {
+    try {
+      if (!this.db) await this.init();
+
+      console.log('Saving notes for video:', videoId);
+      console.log('Notes content:', notes);
+
+      const transaction = this.db.transaction([VIDEOS_STORE], 'readwrite');
+      const videosStore = transaction.objectStore(VIDEOS_STORE);
+
+      const video = await new Promise((resolve, reject) => {
+        const request = videosStore.get(videoId);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+
+      if (!video) {
+        console.error('Video not found:', videoId);
+        return false;
+      }
+
+      console.log('Found video:', video.name);
+      video.notes = notes;
+      await videosStore.put(video);
+
+      return new Promise((resolve, reject) => {
+        transaction.oncomplete = () => {
+          console.log('✅ Notes saved successfully!');
+          resolve(true);
+        };
+        transaction.onerror = () => {
+          console.error('Transaction error:', transaction.error);
+          reject(transaction.error);
+        };
+      });
+    } catch (error) {
+      console.error('Error saving notes:', error);
+      return false;
+    }
+  }
+
   // Delete a course and its videos
   async deleteCourse(courseId) {
     if (!this.db) await this.init();
@@ -168,7 +211,6 @@ class CourseHubDB {
     });
 
     for (const video of videos) {
-      // Revoke blob URLs to free memory
       if (video.blob) {
         URL.revokeObjectURL(URL.createObjectURL(video.blob));
       }

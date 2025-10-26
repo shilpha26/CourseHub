@@ -9,6 +9,155 @@ import {
   TheaterIcon 
 } from './Icons';
 import { formatTime } from '../utils/helpers';
+import React, { useRef, useEffect, useState } from 'react';
+import './VideoPlayer.css';
+
+function VideoPlayer({ video, onVideoComplete, onProgressUpdate }) {
+  const videoRef = useRef(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  useEffect(() => {
+    if (video && video.url && videoRef.current) {
+      videoRef.current.src = video.url;
+      videoRef.current.currentTime = video.progress || 0;
+    }
+  }, [video]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      // Don't trigger if user is typing in an input/textarea
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+        return;
+      }
+
+      const videoElement = videoRef.current;
+      if (!videoElement) return;
+
+      switch(e.key) {
+        case ' ':
+        case 'k':
+          e.preventDefault();
+          if (videoElement.paused) {
+            videoElement.play();
+            setIsPlaying(true);
+          } else {
+            videoElement.pause();
+            setIsPlaying(false);
+          }
+          break;
+
+        case 'ArrowLeft':
+          e.preventDefault();
+          videoElement.currentTime = Math.max(0, videoElement.currentTime - 5);
+          break;
+
+        case 'ArrowRight':
+          e.preventDefault();
+          videoElement.currentTime = Math.min(videoElement.duration, videoElement.currentTime + 5);
+          break;
+
+        case 'j':
+          e.preventDefault();
+          videoElement.currentTime = Math.max(0, videoElement.currentTime - 10);
+          break;
+
+        case 'l':
+          e.preventDefault();
+          videoElement.currentTime = Math.min(videoElement.duration, videoElement.currentTime + 10);
+          break;
+
+        case 'ArrowUp':
+          e.preventDefault();
+          videoElement.volume = Math.min(1, videoElement.volume + 0.1);
+          break;
+
+        case 'ArrowDown':
+          e.preventDefault();
+          videoElement.volume = Math.max(0, videoElement.volume - 0.1);
+          break;
+
+        case 'm':
+          e.preventDefault();
+          videoElement.muted = !videoElement.muted;
+          break;
+
+        case 'f':
+          e.preventDefault();
+          if (document.fullscreenElement) {
+            document.exitFullscreen();
+          } else {
+            videoElement.requestFullscreen();
+          }
+          break;
+
+        case '0':
+        case 'Home':
+          e.preventDefault();
+          videoElement.currentTime = 0;
+          break;
+
+        case 'End':
+          e.preventDefault();
+          videoElement.currentTime = videoElement.duration;
+          break;
+
+        default:
+          // Number keys 1-9 for seeking to percentage
+          if (e.key >= '1' && e.key <= '9') {
+            e.preventDefault();
+            const percent = parseInt(e.key) / 10;
+            videoElement.currentTime = videoElement.duration * percent;
+          }
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, []);
+
+  const handleTimeUpdate = () => {
+    if (videoRef.current && video) {
+      const progress = (videoRef.current.currentTime / videoRef.current.duration) * 100;
+      onProgressUpdate?.(video.id, progress);
+    }
+  };
+
+  const handleEnded = () => {
+    if (video) {
+      onVideoComplete?.(video.id);
+    }
+  };
+
+  if (!video) {
+    return (
+      <div className="video-player-placeholder">
+        <p>Select a video to start watching</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="video-player">
+      <video
+        ref={videoRef}
+        controls
+        onTimeUpdate={handleTimeUpdate}
+        onEnded={handleEnded}
+        className="video-element"
+      >
+        Your browser does not support the video tag.
+      </video>
+      
+      {/* Keyboard shortcuts hint */}
+      <div className="keyboard-shortcuts-hint">
+        Press <kbd>Space</kbd> or <kbd>K</kbd> to play/pause • <kbd>←</kbd> <kbd>→</kbd> to seek • <kbd>F</kbd> for fullscreen
+      </div>
+    </div>
+  );
+}
+
 
 function VideoPlayer({ video, onVideoComplete, onProgressUpdate }) {
   const videoRef = useRef(null);
