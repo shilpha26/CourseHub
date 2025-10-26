@@ -8,7 +8,7 @@ function Header({ onUploadClick, onBackClick }) {
         {/* Left: Logo and Title - Always visible */}
         <div className="logo-section">
           <img 
-            src="/images/zip-folder-icon.png" 
+            src={process.env.PUBLIC_URL + "/images/zip-folder-icon.png"}
             alt="CourseHub Logo" 
             width="45" 
             height="45"
