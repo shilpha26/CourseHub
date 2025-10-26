@@ -43,29 +43,43 @@ function App() {
   };
 
   const handleUpload = async (uploadData) => {
-    const { option, courseId, title, description, files } = uploadData;
+  const { option, courseId, title, description, files } = uploadData;
 
-    let targetCourse = null;
+  let targetCourse = null;
 
-    if (option === 'existing') {
-      targetCourse = courses.find(c => c.id === courseId);
-      if (!targetCourse) {
-        alert('Course not found');
-        return;
-      }
+  if (option === 'existing') {
+    targetCourse = courses.find(c => c.id === courseId);
+    if (!targetCourse) {
+      alert('Course not found');
+      return;
     }
+  }
 
-    for (const file of files) {
-      if (file.name.endsWith('.zip')) {
-        await handleZipFile(file, option, targetCourse, title, description);
-      } else if (file.type.startsWith('video/')) {
-        await handleVideoFile(file, option, targetCourse, title, description);
-      }
+  // Separate ZIP files and video files
+  const zipFiles = [];
+  const videoFiles = [];
+
+  for (const file of files) {
+    if (file.name.endsWith('.zip')) {
+      zipFiles.push(file);
+    } else if (file.type.startsWith('video/')) {
+      videoFiles.push(file);
     }
+  }
 
-    // Reload courses from DB
-    await loadCoursesFromDB();
-  };
+  // Process ZIP files (each ZIP becomes its own course or adds to existing)
+  for (const zipFile of zipFiles) {
+    await handleZipFile(zipFile, option, targetCourse, title, description);
+  }
+
+  // Process ALL video files together as ONE course (THIS IS THE KEY FIX)
+  if (videoFiles.length > 0) {
+    await handleMultipleVideoFiles(videoFiles, option, targetCourse, title, description);
+  }
+
+  // Reload courses from DB
+  await loadCoursesFromDB();
+};
 
   const handleZipFile = async (zipFile, option, targetCourse, title, description) => {
     try {
@@ -80,7 +94,7 @@ function App() {
           videos.push({
             id: generateId(),
             name: filename.split('/').pop(),
-            blob: videoBlob, // Store blob instead of URL
+            blob: videoBlob,
             duration: 0,
             watched: false,
             progress: 0
@@ -114,33 +128,77 @@ function App() {
     }
   };
 
-  const handleVideoFile = async (file, option, targetCourse, title, description) => {
-    const newVideo = {
-      id: generateId(),
-      name: file.name,
-      blob: file, // Store blob directly
-      duration: 0,
-      watched: false,
-      progress: 0
-    };
+  // NEW FUNCTION: Handle multiple video files as ONE course with duplicate detection
+const handleMultipleVideoFiles = async (videoFiles, option, targetCourse, title, description) => {
+  let duplicates = [];
+  let newVideoFiles = videoFiles;
 
-    if (option === 'existing' && targetCourse) {
-      const updatedCourse = {
-        ...targetCourse,
-        videos: [...targetCourse.videos, newVideo]
-      };
-      await courseHubDB.saveCourse(updatedCourse);
-    } else {
-      const newCourse = {
-        id: generateId(),
-        name: title || file.name.replace(/\.[^/.]+$/, ''),
-        description: description || '',
-        videos: [newVideo],
-        createdAt: new Date().toISOString()
-      };
-      await courseHubDB.saveCourse(newCourse);
+  // Check for duplicates if adding to existing course
+  if (option === 'existing' && targetCourse) {
+    const existingVideoNames = targetCourse.videos.map(v => v.name.toLowerCase());
+    
+    duplicates = videoFiles.filter(file => 
+      existingVideoNames.includes(file.name.toLowerCase())
+    );
+
+    newVideoFiles = videoFiles.filter(file => 
+      !existingVideoNames.includes(file.name.toLowerCase())
+    );
+
+    // Show warning if duplicates found
+    if (duplicates.length > 0) {
+      const duplicateNames = duplicates.map(f => f.name).join('\n');
+      const continueUpload = window.confirm(
+        `⚠️ Duplicate Video${duplicates.length > 1 ? 's' : ''} Found!\n\n` +
+        `The following video${duplicates.length > 1 ? 's already exist' : ' already exists'} in "${targetCourse.name}":\n\n` +
+        `${duplicateNames}\n\n` +
+        `${newVideoFiles.length > 0 
+          ? `Do you want to upload the ${newVideoFiles.length} new video${newVideoFiles.length !== 1 ? 's' : ''}?` 
+          : 'All videos are duplicates. Nothing to upload.'}`
+      );
+
+      if (!continueUpload || newVideoFiles.length === 0) {
+        return;
+      }
     }
-  };
+  }
+
+  // Create video objects for all non-duplicate files
+  const newVideos = newVideoFiles.map(file => ({
+    id: generateId(),
+    name: file.name,
+    blob: file,
+    duration: 0,
+    watched: false,
+    progress: 0
+  }));
+
+  if (option === 'existing' && targetCourse) {
+    // Add all new videos to existing course
+    const updatedCourse = {
+      ...targetCourse,
+      videos: [...targetCourse.videos, ...newVideos]
+    };
+    await courseHubDB.saveCourse(updatedCourse);
+    
+    // Show success message
+    if (newVideos.length > 0) {
+      alert(`✅ ${newVideos.length} video${newVideos.length !== 1 ? 's' : ''} added to "${targetCourse.name}"!`);
+    }
+  } else {
+    // Create ONE new course with ALL videos
+    const newCourse = {
+      id: generateId(),
+      name: title || `Course - ${new Date().toLocaleDateString()}`,
+      description: description || '',
+      videos: newVideos,
+      createdAt: new Date().toISOString()
+    };
+    await courseHubDB.saveCourse(newCourse);
+    
+    alert(`✅ Course "${newCourse.name}" created with ${newVideos.length} video${newVideos.length !== 1 ? 's' : ''}!`);
+  }
+};
 
   const handleCourseSelect = (course) => {
     setSelectedCourse(course);
